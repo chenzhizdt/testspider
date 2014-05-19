@@ -1,7 +1,6 @@
 package com.triman.spider;
 
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -16,23 +15,42 @@ public class TestPageProcessor implements PageProcessor {
 	public static final String URL58 = "http://qy.58.com";
 
     private Site site = Site.me().setDomain("qy.58.com");
+    
+    private int countUnnormal = 0;
 
-    public void process(Page page) {
+	public void process(Page page) {
     	String url = page.getUrl().toString();
     	if(url.equals(URL58)) {
     		List<String> links = page.getHtml().xpath("//div[@class='hotCityList']/a").links().all();
-    		List<String> newLinks = new ArrayList<String>();
-    		Iterator<String> it = links.iterator();
-    		while(it.hasNext()) {
-    			String link = it.next();
-    			String newLink = link.replace(" ", "%20");
-    			newLinks.add(newLink);
-    		}
-    		page.addTargetRequests(newLinks);
+    		page.addTargetRequests(links);
+    	} else if(isCompanyPage(url)) {
+    		List<String> titles = page.getHtml().xpath("//div[@class='compT']/h1/a/text()").all();
+    		page.putField("titles", titles);
     	} else {
     		List<String> titles = page.getHtml().xpath("//div[@class='compList']/ul/li/span/a/text()").all();
-    		if(!titles.isEmpty()) {
-    			page.putField("titles", titles);
+    		List<String> links = page.getHtml().xpath("//div[@class='compList']/ul/li/span/a/@href").all();
+    		List<String> normalTitles = new ArrayList<String>();
+    		List<String> requestLinks = new ArrayList<String>();
+    		if(!titles.isEmpty()){
+    			for(int i = 0; i < titles.size(); i++){
+    				String title = titles.get(i);
+    				if(!title.endsWith("...")){
+    					normalTitles.add(title);
+    				} else {
+//    					System.out.println("Unnormal Title: " + title);
+//    					System.out.println("Unnormal Link: " + links.get(i));
+    					requestLinks.add(links.get(i));
+    					synchronized (this) {
+							this.countUnnormal++;
+							System.out.println("Unnormal Count: " + this.countUnnormal);
+						}
+    				}
+    			}
+    			page.putField("titles", normalTitles);
+    			if(!requestLinks.isEmpty()){
+    				page.addTargetRequests(requestLinks);
+    			}
+    			
     			int pageNumber = this.pageNumber(url);
     			String requestString = null;
     			if(pageNumber == 1) {
@@ -42,8 +60,17 @@ public class TestPageProcessor implements PageProcessor {
     				requestString = this.baseUrl(url) + pageNumber + "/";
     			}
     			page.addTargetRequest(requestString);
-//    			System.out.println("Add a new request: " + requestString);
     		}
+    	}
+    }
+    
+    private boolean isCompanyPage(String url){
+    	Pattern p = Pattern.compile("http://qy.58.com/\\d+/$");
+    	Matcher m = p.matcher(url);
+    	if(m.find()){
+    		return true;
+    	} else {
+    		return false;
     	}
     }
     
@@ -75,17 +102,17 @@ public class TestPageProcessor implements PageProcessor {
     	String path = null;
     	String url = null;
     	if (args.length == 0) {
-    		path = "f://companys.txt";
+    		path = "d://companys.txt";
     		url = URL58;
     	} else if (args.length == 1) {
     		url = args[0];
-    		path = "f://companys.txt";
+    		path = "d://companys.txt";
     		System.out.println(args[0]);
 		} else {
     		url = args[0];
 			path = args[1];
 		}
         Spider.create(new TestPageProcessor()).addUrl(url)
-             .addPipeline(new FileOutputPipeline(path)).run();
+             .addPipeline(new FileOutputPipeline(path)).thread(20).run();
     }
 }

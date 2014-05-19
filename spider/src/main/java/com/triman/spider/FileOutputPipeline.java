@@ -27,7 +27,7 @@ public class FileOutputPipeline implements Pipeline{
 		this.path = path;
 	}
 
-	public void process(ResultItems resultItems, Task task) {
+	public synchronized void process(ResultItems resultItems, Task task) {
 		try {
 			 FileWriter fw = new FileWriter(path,true);
 			 BufferedWriter bw = new BufferedWriter(fw);
